@@ -1,5 +1,14 @@
 <template>
   <div class="article-detail" v-loading="loading">
+    <el-alert
+      v-if="fetchError"
+      type="error"
+      show-icon
+      :closable="false"
+      class="status-alert"
+      :title="fetchError"
+    />
+
     <template v-if="article">
       <el-card>
         <template #header>
@@ -37,10 +46,10 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowLeft } from '@element-plus/icons-vue'
-import { marked } from 'marked'
+import { renderMarkdown } from '../utils/markdown'
 import api from '../api'
 
 const route = useRoute()
@@ -48,32 +57,45 @@ const router = useRouter()
 
 const article = ref(null)
 const loading = ref(false)
-
-// Configure marked
-marked.setOptions({
-  breaks: true,
-  gfm: true
-})
+const fetchError = ref('')
+let fetchSequence = 0
 
 const renderedContent = computed(() => {
-  if (!article.value) return ''
-  return marked(article.value.body)
+  return renderMarkdown(article.value?.body)
 })
 
-onMounted(() => {
-  fetchArticle()
+watch(() => route.params.id, fetchArticle, { immediate: true })
+
+function handlePageShow(event) {
+  if (event.persisted) fetchArticle()
+}
+
+window.addEventListener('pageshow', handlePageShow)
+
+onBeforeUnmount(() => {
+  window.removeEventListener('pageshow', handlePageShow)
 })
 
 async function fetchArticle() {
+  const sequence = ++fetchSequence
+  const { id } = route.params
+  article.value = null
   loading.value = true
+  fetchError.value = ''
   try {
-    const { id } = route.params
     const response = await api.get(`/articles/${id}`)
-    article.value = response.data
+    if (sequence === fetchSequence) {
+      article.value = response.data
+    }
   } catch (error) {
-    console.error('Failed to fetch article:', error)
+    if (sequence === fetchSequence) {
+      console.error('Failed to fetch article:', error)
+      fetchError.value = '获取线上文章失败，请稍后重试。'
+    }
   } finally {
-    loading.value = false
+    if (sequence === fetchSequence) {
+      loading.value = false
+    }
   }
 }
 
@@ -100,6 +122,10 @@ function formatDate(dateStr) {
 
 .article-header {
   margin-bottom: 20px;
+}
+
+.status-alert {
+  margin-bottom: 16px;
 }
 
 .article-title {

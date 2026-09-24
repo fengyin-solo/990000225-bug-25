@@ -15,6 +15,12 @@ initDb();
 app.use(cors());
 app.use(express.json());
 
+// Always serve the current committed article data; drafts remain frontend-only.
+app.use('/api', (req, res, next) => {
+  res.set('Cache-Control', 'no-store');
+  next();
+});
+
 // Routes
 app.use('/api/auth', authRouter);
 app.use('/api/articles', articlesRouter);

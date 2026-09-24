@@ -7,6 +7,15 @@
       </el-button>
     </div>
     
+    <el-alert
+      v-if="fetchError"
+      type="error"
+      show-icon
+      :closable="false"
+      class="status-alert"
+      :title="fetchError"
+    />
+
     <el-card>
       <el-table :data="articles" v-loading="loading" style="width: 100%">
         <el-table-column prop="id" label="ID" width="80" />
@@ -46,7 +55,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '../../api'
@@ -56,6 +65,7 @@ const router = useRouter()
 
 const articles = ref([])
 const loading = ref(false)
+const fetchError = ref('')
 const currentPage = ref(1)
 const pagination = ref({
   total: 0,
@@ -63,24 +73,45 @@ const pagination = ref({
   limit: 10,
   totalPages: 0
 })
+let fetchSequence = 0
 
 onMounted(() => {
   fetchArticles()
+  window.addEventListener('pageshow', handlePageShow)
 })
 
+onBeforeUnmount(() => {
+  window.removeEventListener('pageshow', handlePageShow)
+})
+
+function handlePageShow(event) {
+  if (event.persisted) {
+    currentPage.value = 1
+    fetchArticles()
+  }
+}
+
 async function fetchArticles() {
+  const sequence = ++fetchSequence
   loading.value = true
+  fetchError.value = ''
   try {
     const response = await api.get('/articles', {
       params: { page: currentPage.value, limit: pagination.value.limit }
     })
-    articles.value = response.data.articles
-    pagination.value = response.data.pagination
+    if (sequence === fetchSequence) {
+      articles.value = response.data.articles
+      pagination.value = response.data.pagination
+    }
   } catch (error) {
-    console.error('Failed to fetch articles:', error)
-    ElMessage.error('获取文章列表失败')
+    if (sequence === fetchSequence) {
+      console.error('Failed to fetch articles:', error)
+      fetchError.value = '获取文章列表失败，页面仍显示上一次成功获取的内容。可稍后重试。'
+    }
   } finally {
-    loading.value = false
+    if (sequence === fetchSequence) {
+      loading.value = false
+    }
   }
 }
 
@@ -136,6 +167,10 @@ function formatDate(dateStr) {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 20px;
+}
+
+.status-alert {
+  margin-bottom: 16px;
 }
 
 .page-title {

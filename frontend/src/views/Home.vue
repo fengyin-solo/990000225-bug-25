@@ -9,6 +9,15 @@
           </el-tag>
         </h2>
         
+        <el-alert
+          v-if="fetchError"
+          type="error"
+          show-icon
+          :closable="false"
+          class="status-alert"
+          :title="fetchError"
+        />
+
         <div v-loading="loading">
           <ArticleCard
             v-for="article in articles"
@@ -41,7 +50,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import api from '../api'
 import ArticleCard from '../components/ArticleCard.vue'
@@ -54,6 +63,7 @@ const router = useRouter()
 const articles = ref([])
 const tags = ref([])
 const loading = ref(false)
+const fetchError = ref('')
 const selectedTag = ref(null)
 const searchQuery = ref('')
 const currentPage = ref(1)
@@ -63,6 +73,7 @@ const pagination = ref({
   limit: 10,
   totalPages: 0
 })
+let fetchSequence = 0
 
 const pageTitle = computed(() => {
   if (searchQuery.value) {
@@ -87,7 +98,20 @@ onMounted(() => {
   }
   fetchArticles()
   fetchTags()
+  window.addEventListener('pageshow', handlePageShow)
 })
+
+onBeforeUnmount(() => {
+  window.removeEventListener('pageshow', handlePageShow)
+})
+
+function handlePageShow(event) {
+  if (event.persisted) {
+    currentPage.value = 1
+    fetchArticles()
+    fetchTags()
+  }
+}
 
 watch(() => route.query, (newQuery) => {
   if (newQuery.tag !== selectedTag.value) {
@@ -101,7 +125,9 @@ watch(() => route.query, (newQuery) => {
 })
 
 async function fetchArticles() {
+  const sequence = ++fetchSequence
   loading.value = true
+  fetchError.value = ''
   try {
     const params = {
       page: currentPage.value,
@@ -113,14 +139,21 @@ async function fetchArticles() {
     if (searchQuery.value) {
       params.search = searchQuery.value
     }
-    
+
     const response = await api.get('/articles', { params })
-    articles.value = response.data.articles
-    pagination.value = response.data.pagination
+    if (sequence === fetchSequence) {
+      articles.value = response.data.articles
+      pagination.value = response.data.pagination
+    }
   } catch (error) {
-    console.error('Failed to fetch articles:', error)
+    if (sequence === fetchSequence) {
+      console.error('Failed to fetch articles:', error)
+      fetchError.value = '获取文章失败，页面仍显示上一次成功获取的内容。可稍后重试。'
+    }
   } finally {
-    loading.value = false
+    if (sequence === fetchSequence) {
+      loading.value = false
+    }
   }
 }
 
@@ -169,6 +202,10 @@ function clearSearch() {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.status-alert {
+  margin-bottom: 16px;
 }
 
 .search-tag {
