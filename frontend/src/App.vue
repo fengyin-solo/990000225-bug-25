@@ -2,13 +2,16 @@
   <div id="app">
     <Navbar />
     <main class="main-content">
-      <router-view />
+      <router-view :key="route.fullPath" />
     </main>
   </div>
 </template>
 
 <script setup>
+import { useRoute } from 'vue-router'
 import Navbar from './components/Navbar.vue'
+
+const route = useRoute()
 </script>
 
 <style>

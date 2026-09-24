@@ -37,11 +37,11 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowLeft } from '@element-plus/icons-vue'
-import { marked } from 'marked'
 import api from '../api'
+import { renderMarkdown } from '../utils/markdown'
 
 const route = useRoute()
 const router = useRouter()
@@ -49,31 +49,36 @@ const router = useRouter()
 const article = ref(null)
 const loading = ref(false)
 
-// Configure marked
-marked.setOptions({
-  breaks: true,
-  gfm: true
-})
-
 const renderedContent = computed(() => {
   if (!article.value) return ''
-  return marked(article.value.body)
+  return renderMarkdown(article.value.body)
 })
 
 onMounted(() => {
   fetchArticle()
 })
 
+watch(() => route.params.id, (newId, oldId) => {
+  if (newId !== oldId) {
+    fetchArticle()
+  }
+})
+
 async function fetchArticle() {
+  const requestedId = route.params.id
   loading.value = true
+  article.value = null
   try {
-    const { id } = route.params
-    const response = await api.get(`/articles/${id}`)
+    const response = await api.get(`/articles/${requestedId}`)
+    if (route.params.id !== requestedId) return
     article.value = response.data
   } catch (error) {
+    if (route.params.id !== requestedId) return
     console.error('Failed to fetch article:', error)
   } finally {
-    loading.value = false
+    if (route.params.id === requestedId) {
+      loading.value = false
+    }
   }
 }
 
